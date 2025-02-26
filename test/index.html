@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chatly Test Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.1/socket.io.js"></script>
+    <style>
+        body { 
+            margin: 20px; 
+            font-family: Arial, sans-serif; 
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #f0f0f0;
+        }
+        #messages { 
+            height: 300px; 
+            overflow-y: auto; 
+            border: 1px solid #ccc; 
+            margin: 10px 0; 
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status { 
+            color: #666; 
+            font-style: italic;
+        }
+        .message { 
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 4px;
+            background: #e9ecef;
+        }
+        .controls { 
+            margin: 10px 0;
+            display: flex;
+            gap: 10px;
+        }
+        button { 
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #ccc;
+        }
+        #messageInput {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .debug {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h2>Chatly Test Client</h2>
+    <div id="status">Stato: Disconnesso</div>
+    <div class="controls">
+        <button id="connectBtn">Connetti</button>
+        <button id="searchBtn" disabled>Cerca Partner</button>
+        <button id="leaveBtn" disabled>Lascia Chat</button>
+    </div>
+    <div id="messages"></div>
+    <div class="controls">
+        <input type="text" id="messageInput" placeholder="Scrivi un messaggio..." disabled>
+        <button id="sendBtn" disabled>Invia</button>
+    </div>
+    <div id="debug" class="debug"></div>
+
+    <script>
+        let socket;
+        const debugDiv = document.getElementById('debug');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const searchBtn = document.getElementById('searchBtn');
+        const leaveBtn = document.getElementById('leaveBtn');
+        const sendBtn = document.getElementById('sendBtn');
+
+        function updateStatus(text) {
+            statusDiv.textContent = `Stato: ${text}`;
+        }
+
+        function addMessage(text, isStatus = false) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            div.className = isStatus ? 'status' : 'message';
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateDebug(data) {
+            debugDiv.textContent = JSON.stringify(data, null, 2);
+        }
+
+        connectBtn.addEventListener('click', () => {
+            if (!socket) {
+              socket = io('http://localhost:3001', {
+                transports: ['websocket'],
+                cors: {
+                    origin: "*"
+                }
+            });
+                
+                socket.on('connect', () => {
+                    updateStatus('Connesso');
+                    connectBtn.textContent = 'Disconnetti';
+                    searchBtn.disabled = false;
+                    addMessage('Connesso al server', true);
+                    updateDebug({ event: 'connect', socketId: socket.id });
+                });
+
+                socket.on('chat_started', ({ roomId }) => {
+                    updateStatus('Chat Attiva');
+                    addMessage('Chat iniziata! Room ID: ' + roomId, true);
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    searchBtn.disabled = true;
+                    leaveBtn.disabled = false;
+                    updateDebug({ event: 'chat_started', roomId });
+                });
+
+                socket.on('receive_message', ({ senderId, message, timestamp }) => {
+                    const isMe = senderId === socket.id;
+                    addMessage(`${isMe ? 'Tu' : 'Partner'}: ${message}`);
+                    updateDebug({ event: 'receive_message', senderId, message, timestamp });
+                });
+
+                socket.on('partner_left', () => {
+                    updateStatus('Partner Disconnesso');
+                    addMessage('Il partner ha lasciato la chat', true);
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                    searchBtn.disabled = false;
+                    leaveBtn.disabled = true;
+                    updateDebug({ event: 'partner_left' });
+                });
+
+                socket.on('disconnect', () => {
+                    updateStatus('Disconnesso');
+                    addMessage('Disconnesso dal server', true);
+                    reset();
+                    updateDebug({ event: 'disconnect' });
+                });
+            } else {
+                socket.disconnect();
+                socket = null;
+                connectBtn.textContent = 'Connetti';
+                updateStatus('Disconnesso');
+                reset();
+                addMessage('Disconnesso manualmente', true);
+                updateDebug({ event: 'manual_disconnect' });
+            }
+        });
+
+        searchBtn.addEventListener('click', () => {
+            socket.emit('start_search');
+            updateStatus('Ricerca in corso...');
+            addMessage('Ricerca di un partner...', true);
+            searchBtn.disabled = true;
+            updateDebug({ event: 'start_search' });
+        });
+
+        leaveBtn.addEventListener('click', () => {
+            socket.emit('leave_chat');
+            updateStatus('Chat Terminata');
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            searchBtn.disabled = false;
+            leaveBtn.disabled = true;
+            addMessage('Hai lasciato la chat', true);
+            updateDebug({ event: 'leave_chat' });
+        });
+
+        sendBtn.addEventListener('click', () => {
+            const message = messageInput.value.trim();
+            if (message && socket) {
+                socket.emit('send_message', message);
+                messageInput.value = '';
+                updateDebug({ event: 'send_message', message });
+            }
+        });
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendBtn.click();
+            }
+        });
+
+        function reset() {
+            searchBtn.disabled = true;
+            leaveBtn.disabled = true;
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+        }
+    </script>
+</body>
+</html>
