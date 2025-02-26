@@ -33,13 +33,20 @@ interface User {
 
 const connectedUsers = new Map<string, User>();
 
+// Track online user count
+function updateOnlineCount() {
+  io.emit('online_count', connectedUsers.size);
+}
+
 io.on('connection', (socket) => {
-  console.log(`Nuovo utente connesso: ${socket.id}`);
+  console.log(`New user connected: ${socket.id}`);
 
   connectedUsers.set(socket.id, {
     socketId: socket.id,
     isSearching: false
   });
+  
+  updateOnlineCount();
 
   socket.on('start_search', async () => {
     const user = connectedUsers.get(socket.id);
@@ -74,7 +81,8 @@ io.on('connection', (socket) => {
       await leaveRoom(socket, user.roomId);
     }
     connectedUsers.delete(socket.id);
-    console.log(`Utente disconnesso: ${socket.id}`);
+    console.log(`User disconnected: ${socket.id}`);
+    updateOnlineCount();
   });
 });
 
@@ -124,8 +132,7 @@ async function leaveRoom(socket: any, roomId: string) {
   }
 }
 
-
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
-  console.log(`Server in esecuzione sulla porta ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Camera, MessageSquare, Users, Shield, Globe2, AlertTriangle } from "lucide-react"
+import { MessageCircle, SkipForward, Send, SmilePlus, ImagePlus, Moon, Sun, Shield, Flag } from "lucide-react"
 import Link from "next/link"
 import io, { Socket } from "socket.io-client"
 
@@ -15,9 +15,11 @@ export default function ChatPlatform() {
   const [isConnected, setIsConnected] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [isChatting, setIsChatting] = useState(false)
+  const [showPreChat, setShowPreChat] = useState(true)
   const [onlineCount, setOnlineCount] = useState(0)
-  const [messages, setMessages] = useState<Array<{text: string, fromSelf: boolean}>>([])
+  const [messages, setMessages] = useState<Array<{text: string, fromSelf: boolean, system?: boolean}>>([])
   const [currentMessage, setCurrentMessage] = useState("")
+  const [darkMode, setDarkMode] = useState(false)
 
   useEffect(() => {
     const newSocket = io("http://localhost:3001", {
@@ -34,7 +36,6 @@ export default function ChatPlatform() {
       console.log("Online count:", count)
     })
 
-
     newSocket.on("chat_started", ({ roomId }) => {
       setIsSearching(false)
       setIsChatting(true)
@@ -50,11 +51,14 @@ export default function ChatPlatform() {
     })
 
     newSocket.on("partner_left", () => {
-      setIsChatting(false)
       setMessages(prev => [...prev, {
-        text: "Il partner ha lasciato la chat",
-        fromSelf: false
+        text: "Your chat partner left. You'll be connected with someone new soon...",
+        fromSelf: false,
+        system: true
       }])
+      
+      // Automatically start searching for a new partner
+      startTextChat()
     })
 
     setSocket(newSocket)
@@ -64,8 +68,26 @@ export default function ChatPlatform() {
     }
   }, [])
 
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode)
+    document.documentElement.classList.toggle("dark")
+  }
+
   const startTextChat = () => {
     if (!socket) return
+    setShowPreChat(false)
+    setIsSearching(true)
+    socket.emit("start_search")
+  }
+
+  const skipToNextChat = () => {
+    if (!socket) return
+    socket.emit("leave_chat")
+    setMessages(prev => [...prev, {
+      text: "Looking for a new chat partner...",
+      fromSelf: false,
+      system: true
+    }])
     setIsSearching(true)
     socket.emit("start_search")
   }
@@ -76,73 +98,88 @@ export default function ChatPlatform() {
     setCurrentMessage("")
   }
 
-  const leaveChat = () => {
+  const returnToHomepage = () => {
     if (!socket) return
     socket.emit("leave_chat")
     setIsChatting(false)
     setMessages([])
+    setShowPreChat(true)
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <div className="container mx-auto px-4">
-        {/* Header */}
-        <header className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-500 text-white p-2 rounded-lg">
-              <Users className="w-6 h-6" />
+  // Pre-chat page with rules
+  if (showPreChat) {
+    return (
+      <div className={`min-h-screen ${darkMode ? "dark" : ""} bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800`}>
+        <div className="flex flex-col h-screen">
+          {/* Header */}
+          <header className="flex items-center justify-between py-3 px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+            <div className="flex items-center gap-2">
+              <div className="bg-blue-500 text-white p-2 rounded-lg">
+                <MessageCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">
+                  Chatly
+                </h1>
+                <p className="text-xs text-muted-foreground">Connect with the world</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">
-                Chatly
-              </h1>
-              <p className="text-sm text-muted-foreground">Connect with the world</p>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-green-500" />
+                <span className="text-sm font-medium">
+                  {onlineCount} online
+                </span>
+              </div>
+              <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
+                {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-green-500" />
-            <span className="text-sm font-medium">
-              {onlineCount}
-            </span>
-          </div>
-        </header>
+          </header>
 
-        {/* Main Content */}
-        <main className="max-w-2xl mx-auto mt-12 space-y-8">
-          {!isChatting ? (
-            <>
+          {/* Pre-chat Rules */}
+          <main className="flex-1 flex flex-col items-center justify-center p-4">
+            <div className="max-w-md w-full space-y-8">
               <div className="text-center space-y-4">
                 <h2 className="text-3xl font-bold tracking-tight">
-                  Meet New People Who Share Your Interests
+                  Welcome to Chatly
                 </h2>
                 <p className="text-lg text-muted-foreground">
-                  Join millions of people discovering meaningful connections through shared passions
+                  Please read the rules below before starting
                 </p>
               </div>
 
-              <div className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
+              <div className="bg-background p-6 rounded-2xl shadow-lg space-y-6">
                 <div className="space-y-4">
-                  <div className="flex items-start gap-4">
-                    <Globe2 className="w-5 h-5 text-blue-500 mt-1" />
-                    <div>
-                      <h3 className="font-medium">Global Connections</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Chat with people from around the world
-                      </p>
-                    </div>
-                  </div>
+                  <Alert className="bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-900">
+                    <AlertDescription className="text-sm text-red-700 dark:text-red-300 font-bold">
+                      You must be 18 or older to use this service
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-500">•</span>
+                      <span>No inappropriate content or conversations</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-500">•</span>
+                      <span>Be respectful to all users</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-500">•</span>
+                      <span>Do not share personal information</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-500">•</span>
+                      <span>Breaking any rules results in a permanent ban</span>
+                    </li>
+                  </ul>
                 </div>
-
-                <Alert className="bg-blue-50 border-blue-200">
-                  <AlertTriangle className="w-4 h-4 text-blue-500" />
-                  <AlertDescription className="text-sm text-blue-700">
-                    Chats are monitored for safety. Keep it friendly and appropriate.
-                  </AlertDescription>
-                </Alert>
 
                 <div className="space-y-4">
                   <label className="block text-sm font-medium">
-                    What would you like to talk about?
+                    What would you like to talk about? (optional)
                   </label>
                   <Input
                     type="text"
@@ -163,61 +200,152 @@ export default function ChatPlatform() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <Button
                     size="lg"
                     className="w-full gap-2 bg-gradient-to-r from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500"
                     onClick={startTextChat}
-                    disabled={!isConnected || isSearching}
+                    disabled={!isConnected}
                   >
-                    <MessageSquare className="w-4 h-4" />
-                    {isSearching ? "Searching..." : "Start Text Chat"}
-                  </Button>
-                  <Button 
-                    size="lg" 
-                    variant="outline" 
-                    className="w-full gap-2 border-2"
-                    disabled={true}
-                  >
-                    <Camera className="w-4 h-4" />
-                    Start Video Chat
+                    <MessageCircle className="w-4 h-4" />
+                    Start Chat
                   </Button>
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="bg-white p-6 rounded-2xl shadow-lg space-y-4">
-              <div className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-2">
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`p-2 rounded-lg max-w-[80%] ${
-                      msg.fromSelf
-                        ? "bg-blue-500 text-white ml-auto"
-                        : "bg-gray-100 text-gray-900"
-                    }`}
-                  >
-                    {msg.text}
-                  </div>
-                ))}
+            </div>
+          </main>
+
+          {/* Footer is controlled by the isChatting state as requested */}
+        </div>
+      </div>
+    )
+  }
+
+  // Chat Interface
+  return (
+    <div className={`min-h-screen ${darkMode ? "dark" : ""} bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800`}>
+      <div className="flex flex-col h-screen">
+        {/* Header */}
+        <header className="flex items-center justify-between py-3 px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+          <div className="flex items-center gap-2">
+            <div className="bg-blue-500 text-white p-2 rounded-lg">
+              <MessageCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">
+                Chatly
+              </h1>
+              <p className="text-xs text-muted-foreground">Connect with the world</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-green-500" />
+              <span className="text-sm font-medium">
+                {onlineCount} online
+              </span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
+              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+          </div>
+        </header>
+
+        {/* Chat Status Bar */}
+        <div className="border-b p-2 bg-background/90">
+          <div className="rounded-lg bg-muted/50 p-2 text-center text-sm">
+            {isSearching ? (
+              <p>Looking for someone to chat with...</p>
+            ) : (
+              <p>You&apos;re now chatting with a random stranger</p>
+            )}
+          </div>
+        </div>
+
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+          {messages.map((message, index) => (
+            <div key={index} className={`flex ${message.fromSelf ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`rounded-lg px-4 py-2 max-w-[80%] ${
+                  message.system 
+                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-center w-full" 
+                    : message.fromSelf 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted"
+                }`}
+              >
+                {message.text}
               </div>
-              <div className="flex gap-2">
-                <Input
-                  value={currentMessage}
-                  onChange={(e) => setCurrentMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && sendMessage(currentMessage)}
-                  placeholder="Type a message..."
-                  className="flex-1"
-                />
-                <Button onClick={() => sendMessage(currentMessage)}>Send</Button>
-                <Button variant="destructive" onClick={leaveChat}>
-                  Leave
+            </div>
+          ))}
+        </div>
+
+        {/* Input Area */}
+        <div className="border-t bg-background p-3">
+          <div className="flex items-center gap-2 max-w-4xl mx-auto">
+            <div className="flex gap-2">
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                className="flex items-center gap-1" 
+                onClick={returnToHomepage}
+              >
+                Stop
+              </Button>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="flex items-center gap-1" 
+                onClick={skipToNextChat}
+                disabled={isSearching}
+              >
+                <SkipForward className="w-4 h-4" />
+                Skip
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex items-center gap-1"
+              >
+                <Flag className="w-4 h-4" />
+                Report
+              </Button>
+            </div>
+            
+            <div className="flex-1 flex items-center gap-2 rounded-full bg-muted px-4 py-2">
+              <input
+                type="text"
+                placeholder="Type a message..."
+                className="flex-1 bg-transparent focus:outline-none"
+                value={currentMessage}
+                onChange={(e) => setCurrentMessage(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage(currentMessage)}
+                disabled={isSearching}
+              />
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" disabled={isSearching}>
+                  <SmilePlus className="w-5 h-5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" disabled={isSearching}>
+                  <ImagePlus className="w-5 h-5" />
                 </Button>
               </div>
             </div>
-          )}
+            <Button 
+              onClick={() => sendMessage(currentMessage)} 
+              className="rounded-full" 
+              size="sm"
+              disabled={isSearching}
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
 
-          <footer className="text-center text-sm text-muted-foreground space-x-4">
+        {/* Footer - Only shown when not chatting as requested */}
+        {!isChatting && (
+          <footer className="py-3 text-center text-sm text-muted-foreground space-x-4 border-t">
             <Link href="#" className="hover:text-blue-500 transition-colors">
               Terms of Service
             </Link>
@@ -231,7 +359,7 @@ export default function ChatPlatform() {
               FAQ
             </Link>
           </footer>
-        </main>
+        )}
       </div>
     </div>
   )
